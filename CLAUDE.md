@@ -2,11 +2,11 @@
 
 ## Goal
 
-vector rag gui
+A Qt6 GUI application for searching local vector RAG stores with markdown rendering.
 
 ## What is vector-rag-gui?
 
-`vector-rag-gui` is a command-line utility built with modern Python tooling and best practices.
+`vector-rag-gui` is a desktop application that provides a graphical interface for querying local FAISS-based vector stores managed by `vector-rag-tool`. It enables semantic document search with rich markdown result rendering, similar to `gemini-file-search-gui` but using local vector stores instead of Gemini's cloud-based File Search API.
 
 ## Technical Requirements
 
@@ -19,6 +19,11 @@ vector rag gui
 ### Dependencies
 
 - `click` - CLI framework
+- `PyQt6` - Qt6 GUI framework
+- `PyQt6-WebEngine` - Web rendering for markdown display
+- `markdown` - Markdown to HTML conversion
+- `pygments` - Syntax highlighting for code blocks
+- `vector-rag-tool` - Local vector RAG backend (library dependency)
 
 ### Development Dependencies
 
@@ -29,20 +34,36 @@ vector rag gui
 - `pip-audit` - Dependency vulnerability scanning
 - `gitleaks` - Secret detection (requires separate installation)
 
-## CLI Arguments
+## CLI Commands
 
 ```bash
-vector-rag-gui [OPTIONS]
+vector-rag-gui [OPTIONS] COMMAND [ARGS]
 ```
 
-### Options
+### Global Options
 
 - `-v, --verbose` - Enable verbose output (count flag: -v, -vv, -vvv)
-  - `-v` (count=1): INFO level logging
-  - `-vv` (count=2): DEBUG level logging
-  - `-vvv` (count=3+): TRACE level (includes library internals)
 - `--help` / `-h` - Show help message
 - `--version` - Show version
+
+### Commands
+
+#### `start` - Launch GUI (default)
+```bash
+vector-rag-gui start [--store STORE_NAME]
+```
+- `--store/-s` - Default store to select on startup
+
+#### `stores` - List available stores
+```bash
+vector-rag-gui stores [--json]
+```
+- `--json` - Output as JSON
+
+#### `config` - Show current configuration
+```bash
+vector-rag-gui config
+```
 
 ## Project Structure
 
@@ -53,9 +74,26 @@ vector-rag-gui/
 │   ├── cli.py            # Click CLI entry point (group with subcommands)
 │   ├── completion.py     # Shell completion command
 │   ├── logging_config.py # Multi-level verbosity logging
-│   └── utils.py          # Utility functions
+│   ├── icons/
+│   │   └── icon.png      # Application icon (256x256)
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── agent.py      # Research agent with Claude via AWS Bedrock
+│   │   ├── stores.py     # Store management (list, get info)
+│   │   └── query.py      # Query execution wrapper
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── aws_knowledge.py  # AWS documentation search tool
+│   │   ├── file_tools.py     # Glob, grep, read file tools
+│   │   ├── vector_rag.py     # Local vector store search tool
+│   │   └── web_search.py     # Web search tool
+│   └── gui/
+│       ├── __init__.py
+│       ├── main_window.py # Qt6 main application window
+│       └── worker.py      # Background query thread
 ├── tests/
 │   ├── __init__.py
+│   ├── test_core.py
 │   └── test_utils.py
 ├── pyproject.toml        # Project configuration
 ├── README.md             # User documentation
@@ -65,6 +103,89 @@ vector-rag-gui/
 ├── .mise.toml            # mise configuration
 ├── .gitleaks.toml        # Gitleaks configuration
 └── .gitignore
+```
+
+## GUI Features
+
+### Main Window
+- Store selector dropdown with refresh button
+- Search input field with Enter key support
+- QWebEngineView for GitHub-flavored markdown rendering
+- Splitter layout with results view and sources panel
+- Status bar showing query time and result count
+- System tray integration
+
+### Result Display
+- Configurable: snippets (default) or full content (toggle)
+- Syntax highlighting for code blocks (Pygments)
+- Dark/Light mode toggle (Ctrl+D, default dark)
+
+### Metadata Panel (Sources)
+- File path with line numbers
+- Similarity score with human-readable level
+- Tags and links from chunk metadata
+
+### Keyboard Shortcuts
+- Ctrl+L: Focus search input
+- Ctrl+R: Refresh stores
+- Ctrl+D: Toggle dark/light mode
+- Ctrl+I: Show store info
+- Ctrl+M: Minimize to tray
+- Ctrl+Q: Quit
+
+## Research Agent Tools
+
+The research agent has access to 6 tools for gathering information:
+
+| Tool | Description |
+|------|-------------|
+| `search_local_knowledge` | Search local FAISS vector stores |
+| `search_aws_docs` | Search AWS documentation via aws-knowledge-tool |
+| `search_web` | Search the web via gemini-google-search-tool |
+| `glob_files` | Find files matching glob patterns (e.g., `**/*.py`) |
+| `grep_files` | Search for regex patterns in files |
+| `read_file` | Read contents of a specific file |
+
+File tools are read-only and restricted to the current working directory for security.
+
+## Backend Integration
+
+The GUI integrates with `vector-rag-tool` as a library dependency:
+
+```python
+# List stores
+from vector_rag_tool.core.backend_factory import get_backend
+backend = get_backend()
+stores = backend.list_stores()
+
+# Query a store
+from vector_rag_tool.services.querier import Querier
+querier = Querier(backend=backend)
+result = querier.query(
+    store_name="my-store",
+    query_text="search query",
+    top_k=5,
+    snippet_length=300
+)
+```
+
+### Query Result Format
+```python
+# QueryResult contains:
+result.query            # Original query text
+result.chunks           # List of Chunk objects with metadata
+result.scores           # Similarity scores
+result.query_time       # Query duration in seconds
+
+# Each Chunk contains:
+chunk.content           # Text content (snippet or full)
+chunk.metadata.source_file     # File path
+chunk.metadata.line_start      # Start line number
+chunk.metadata.line_end        # End line number
+chunk.metadata.tags            # List of tags
+chunk.metadata.links           # List of links
+chunk.metadata.word_count      # Word count
+chunk.metadata.char_count      # Character count
 ```
 
 ## Code Style
