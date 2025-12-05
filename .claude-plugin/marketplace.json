@@ -1,0 +1,19 @@
+{
+    "name": "vector-rag-gui",
+    "owner": {
+        "name": "Dennis Vriend",
+        "email": "dvriend@ilionx.com",
+        "url": "https://github.com/dnvriend"
+    },
+    "metadata": {
+        "description": "Marketplace for vector-rag-gui CLI plugin - vector rag gui",
+        "version": "0.1.0"
+    },
+    "plugins": [
+        {
+            "name": "vector-rag-gui",
+            "source": "./plugins/vector-rag-gui",
+            "description": "vector rag gui"
+        }
+    ]
+}
