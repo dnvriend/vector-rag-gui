@@ -39,6 +39,14 @@ class WindowSettings:
 
 
 @dataclass
+class AgentSettings:
+    """Agent prompt and behavior settings."""
+
+    custom_prompt: str = ""  # User-defined custom instructions appended to system prompt
+    obsidian_mode: bool = False  # Enable Obsidian-aware behavior
+
+
+@dataclass
 class ResearchSettings:
     """Research mode settings."""
 
@@ -49,6 +57,7 @@ class ResearchSettings:
     model: str = "sonnet"
     dark_mode: bool = True
     full_content: bool = False
+    parallel_mode: bool = True  # Enable parallel subagent execution by default
 
 
 @dataclass
@@ -59,6 +68,7 @@ class Settings:
     selected_stores: list[str] = field(default_factory=list)
     window: WindowSettings = field(default_factory=WindowSettings)
     research: ResearchSettings = field(default_factory=ResearchSettings)
+    agent: AgentSettings = field(default_factory=AgentSettings)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert settings to dictionary for JSON serialization."""
@@ -80,6 +90,11 @@ class Settings:
                 "model": self.research.model,
                 "dark_mode": self.research.dark_mode,
                 "full_content": self.research.full_content,
+                "parallel_mode": self.research.parallel_mode,
+            },
+            "agent": {
+                "custom_prompt": self.agent.custom_prompt,
+                "obsidian_mode": self.agent.obsidian_mode,
             },
         }
 
@@ -88,6 +103,7 @@ class Settings:
         """Create settings from dictionary."""
         window_data = data.get("window", {})
         research_data = data.get("research", {})
+        agent_data = data.get("agent", {})
 
         window = WindowSettings(
             x=window_data.get("x", DEFAULT_WINDOW_X),
@@ -105,6 +121,12 @@ class Settings:
             model=research_data.get("model", "sonnet"),
             dark_mode=research_data.get("dark_mode", True),
             full_content=research_data.get("full_content", False),
+            parallel_mode=research_data.get("parallel_mode", True),
+        )
+
+        agent = AgentSettings(
+            custom_prompt=agent_data.get("custom_prompt", ""),
+            obsidian_mode=agent_data.get("obsidian_mode", False),
         )
 
         return cls(
@@ -112,6 +134,7 @@ class Settings:
             selected_stores=data.get("selected_stores", []),
             window=window,
             research=research,
+            agent=agent,
         )
 
 

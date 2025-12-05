@@ -57,22 +57,8 @@ async def health_check() -> HealthResponse:
         )
 
 
-AVAILABLE_TOOLS = [
-    ToolInfo(
-        name="local",
-        description="Search local FAISS vector stores (notes, code, internal docs)",
-        category="search",
-    ),
-    ToolInfo(
-        name="aws",
-        description="Search official AWS documentation via aws-knowledge-tool",
-        category="search",
-    ),
-    ToolInfo(
-        name="web",
-        description="Search the web via gemini-google-search-tool",
-        category="search",
-    ),
+# Core tools - always enabled, cannot be disabled
+CORE_TOOLS = [
     ToolInfo(
         name="glob",
         description="Find files matching glob patterns (e.g., '**/*.py')",
@@ -88,7 +74,39 @@ AVAILABLE_TOOLS = [
         description="Read contents of a specific file",
         category="file",
     ),
+    ToolInfo(
+        name="todo_read",
+        description="Read current task list",
+        category="task",
+    ),
+    ToolInfo(
+        name="todo_write",
+        description="Update task list",
+        category="task",
+    ),
 ]
+
+# Optional tools - can be enabled/disabled
+OPTIONAL_TOOLS = [
+    ToolInfo(
+        name="local",
+        description="Search local FAISS vector stores (notes, code, internal docs)",
+        category="search",
+    ),
+    ToolInfo(
+        name="aws",
+        description="Search official AWS documentation via aws-knowledge-tool",
+        category="search",
+    ),
+    ToolInfo(
+        name="web",
+        description="Web tools: web_search, web_fetch, extended web research (default: off)",
+        category="web",
+    ),
+]
+
+# Combined list for API
+AVAILABLE_TOOLS = CORE_TOOLS + OPTIONAL_TOOLS
 
 
 @router.get(

@@ -89,26 +89,32 @@ class TestToolsEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["count"] == 6
-        assert len(data["tools"]) == 6
+        # 5 core tools + 3 optional tools = 8 total
+        assert data["count"] == 8
+        assert len(data["tools"]) == 8
 
-        # Check tool structure
+        # Check tool structure - core tools (always enabled)
         tool_names = [t["name"] for t in data["tools"]]
-        assert "local" in tool_names
-        assert "aws" in tool_names
-        assert "web" in tool_names
         assert "glob" in tool_names
         assert "grep" in tool_names
         assert "read" in tool_names
+        assert "todo_read" in tool_names
+        assert "todo_write" in tool_names
+        # Optional tools (toggleable)
+        assert "local" in tool_names
+        assert "aws" in tool_names
+        assert "web" in tool_names  # enables web_search, web_fetch, extended web
 
         # Check categories
         categories = {t["name"]: t["category"] for t in data["tools"]}
         assert categories["local"] == "search"
         assert categories["aws"] == "search"
-        assert categories["web"] == "search"
+        assert categories["web"] == "web"
         assert categories["glob"] == "file"
         assert categories["grep"] == "file"
         assert categories["read"] == "file"
+        assert categories["todo_read"] == "task"
+        assert categories["todo_write"] == "task"
 
 
 class TestStoresEndpoint:
@@ -155,14 +161,13 @@ class TestResearchEndpoint:
 
     def test_research_request_model_defaults(self) -> None:
         """Test ResearchRequest model defaults."""
-        request = ResearchRequest(question="What is AWS Lambda?", stores=["test-store"])
+        # With defaults: stores defaults to obsidian-knowledge-base, tools defaults to [LOCAL]
+        request = ResearchRequest(question="What is AWS Lambda?")
         assert request.question == "What is AWS Lambda?"
-        assert request.stores == ["test-store"]
+        assert request.stores == ["obsidian-knowledge-base"]  # Default store
         assert request.model == ModelChoice.SONNET
+        # Default tools: only LOCAL (core tools are always enabled separately)
         assert ToolChoice.LOCAL in request.tools
-        assert ToolChoice.GLOB in request.tools
-        assert ToolChoice.GREP in request.tools
-        assert ToolChoice.READ in request.tools
         assert ToolChoice.AWS not in request.tools
         assert ToolChoice.WEB not in request.tools
         assert request.top_k == 5
@@ -229,16 +234,32 @@ class TestResearchEndpoint:
         )
         assert response.status_code == 422  # Validation error
 
-    def test_research_endpoint_validation_error_missing_stores(self, client: TestClient) -> None:
-        """Test research request with missing stores."""
-        response = client.post(
-            "/api/v1/research",
-            json={
-                "question": "Test question",
-                # Missing required stores field
-            },
-        )
-        assert response.status_code == 422  # Validation error
+    def test_research_endpoint_with_defaults(self, client: TestClient) -> None:
+        """Test research request using default stores (stores field is now optional)."""
+        # Since stores has a default value, requests without stores should use the default
+        # This test ensures the default store is used
+        mock_result = MagicMock()
+        mock_result.document = "# Research\n\nContent"
+        mock_result.sources = []
+        mock_result.usage.input_tokens = 50
+        mock_result.usage.output_tokens = 100
+        mock_result.usage.total_tokens = 150
+        mock_result.usage.calculate_cost.return_value = 0.001
+        mock_result.model.value = "sonnet"
+        mock_result.model_id = "anthropic.claude-sonnet"
+        mock_result.query = "Test question"
+
+        with patch("vector_rag_gui.api.routes.ResearchAgent") as mock_agent_class:
+            mock_agent = MagicMock()
+            mock_agent.research.return_value = mock_result
+            mock_agent_class.return_value = mock_agent
+
+            response = client.post(
+                "/api/v1/research",
+                json={"question": "Test question"},  # No stores - uses default
+            )
+
+        assert response.status_code == 200
 
     def test_research_endpoint_agent_error(self, client: TestClient) -> None:
         """Test research request when agent fails."""

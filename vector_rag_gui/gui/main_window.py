@@ -22,6 +22,8 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -29,6 +31,8 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSplitter,
     QSystemTrayIcon,
@@ -40,7 +44,7 @@ from PyQt6.QtWidgets import (
 from vector_rag_gui.core.agent import ResearchResult
 from vector_rag_gui.core.query import QueryResult
 from vector_rag_gui.core.settings import Settings, load_settings, save_settings
-from vector_rag_gui.gui.worker import QueryWorker, ResearchWorker
+from vector_rag_gui.gui.worker import ParallelResearchWorker, QueryWorker, ResearchWorker
 from vector_rag_gui.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -62,7 +66,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings or load_settings()
         self.default_store = default_store or DEFAULT_STORE
-        self.worker: QueryWorker | ResearchWorker | None = None
+        self.worker: QueryWorker | ResearchWorker | ParallelResearchWorker | None = None
         self.stores: list[dict[str, str]] = []
         self.stores_menu: QMenu  # Initialized in _init_menu
         self.splitter: QSplitter  # Initialized in _init_ui
@@ -151,6 +155,16 @@ class MainWindow(QMainWindow):
         self.model_combo.setFixedWidth(140)
         research_layout.addWidget(self.model_combo)
 
+        # Parallel mode toggle
+        self.parallel_mode_checkbox = QCheckBox("Parallel")
+        self.parallel_mode_checkbox.setToolTip(
+            "Enable parallel subagent execution (faster, map-reduce pattern)"
+        )
+        self.parallel_mode_checkbox.setChecked(
+            getattr(self.settings.research, "parallel_mode", True)
+        )
+        research_layout.addWidget(self.parallel_mode_checkbox)
+
         # Full content toggle (only for direct search mode)
         self.full_content_checkbox = QCheckBox("Full Content")
         self.full_content_checkbox.setToolTip("Show full content instead of snippets")
@@ -209,10 +223,26 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.splitter)
 
-        # Status bar
+        # Status bar with progress indicator
+        status_layout = QHBoxLayout()
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(10)
+
+        # Progress bar (indeterminate mode)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)  # Indeterminate mode
+        self.progress_bar.setFixedWidth(120)
+        self.progress_bar.setFixedHeight(12)
+        self.progress_bar.hide()  # Hidden by default
+        status_layout.addWidget(self.progress_bar)
+
+        # Status label
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color: #666;")
-        layout.addWidget(self.status_label)
+        status_layout.addWidget(self.status_label)
+
+        status_layout.addStretch()
+        layout.addLayout(status_layout)
 
         # Keyboard shortcuts
         search_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
@@ -273,6 +303,27 @@ class MainWindow(QMainWindow):
         assert stores_menu is not None
         self.stores_menu = stores_menu
         self._update_stores_menu()
+
+        # Agent menu
+        agent_menu = menubar.addMenu("&Agent")
+        assert agent_menu is not None
+
+        prompt_action = QAction("&Custom Prompt...", self)
+        prompt_action.setShortcut("Ctrl+P")
+        prompt_action.setToolTip("Set custom instructions for the research agent")
+        prompt_action.triggered.connect(self._show_prompt_dialog)
+        agent_menu.addAction(prompt_action)
+
+        agent_menu.addSeparator()
+
+        self.obsidian_mode_action = QAction("&Obsidian Mode", self)
+        self.obsidian_mode_action.setCheckable(True)
+        self.obsidian_mode_action.setChecked(self.settings.agent.obsidian_mode)
+        self.obsidian_mode_action.setToolTip(
+            "Enable Obsidian vault knowledge (daily notes, wiki links, transcripts)"
+        )
+        self.obsidian_mode_action.triggered.connect(self._toggle_obsidian_mode)
+        agent_menu.addAction(self.obsidian_mode_action)
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -399,6 +450,9 @@ class MainWindow(QMainWindow):
         self.settings.research.model = self.model_combo.currentData() or "sonnet"
         self.settings.research.dark_mode = self.dark_mode
         self.settings.research.full_content = self.full_content
+        self.settings.research.parallel_mode = self.parallel_mode_checkbox.isChecked()
+
+        # Agent settings already saved via their respective handlers
 
         save_settings(self.settings)
 
@@ -423,6 +477,48 @@ class MainWindow(QMainWindow):
         """Toggle web search source."""
         self.use_web = self.use_web_checkbox.isChecked()
 
+    def _toggle_obsidian_mode(self) -> None:
+        """Toggle Obsidian mode for vault-aware research."""
+        self.settings.agent.obsidian_mode = self.obsidian_mode_action.isChecked()
+
+    def _show_prompt_dialog(self) -> None:
+        """Show dialog for editing custom agent prompt."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Custom Agent Prompt")
+        dialog.setMinimumSize(500, 300)
+
+        layout = QVBoxLayout(dialog)
+
+        # Instructions label
+        label = QLabel(
+            "Enter custom instructions to append to the research agent's system prompt.\n"
+            "These instructions guide how the agent synthesizes information."
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        # Text editor for prompt
+        prompt_edit = QPlainTextEdit()
+        prompt_edit.setPlaceholderText(
+            "Example:\n"
+            "- Focus on Python best practices\n"
+            "- Include cost comparisons where relevant\n"
+            "- Write for a technical audience"
+        )
+        prompt_edit.setPlainText(self.settings.agent.custom_prompt)
+        layout.addWidget(prompt_edit)
+
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.agent.custom_prompt = prompt_edit.toPlainText()
+
     def _update_research_controls_visibility(self) -> None:
         """Update visibility of research-specific controls."""
         # Tool selection checkboxes and model selector are only relevant in research mode
@@ -431,6 +527,7 @@ class MainWindow(QMainWindow):
         self.use_aws_checkbox.setVisible(visible)
         self.use_web_checkbox.setVisible(visible)
         self.model_combo.setVisible(visible)
+        self.parallel_mode_checkbox.setVisible(visible)
 
         # Find and update the "Sources:" and "Model:" labels visibility
         parent = self.use_local_checkbox.parent()
@@ -630,20 +727,40 @@ Index Size: {info.get("index_size_mb", 0):.2f} MB""")
             if not selected_stores and self.use_local:
                 selected_stores = ["obsidian-knowledge-base"]
 
-            self.status_label.setText("Researching...")
             self.sources_text.clear()
 
             # Get selected model
             model_choice = self.model_combo.currentData() or "sonnet"
 
-            self.worker = ResearchWorker(
-                query=query,
-                model_choice=model_choice,
-                use_local=self.use_local,
-                use_aws=self.use_aws,
-                use_web=self.use_web,
-                local_stores=selected_stores,
-            )
+            # Check if parallel mode is enabled
+            parallel_mode = self.parallel_mode_checkbox.isChecked()
+
+            # Show progress bar during research
+            self.progress_bar.show()
+
+            if parallel_mode:
+                self.status_label.setText("Researching (parallel)...")
+                self.worker = ParallelResearchWorker(
+                    query=query,
+                    model_choice=model_choice,
+                    use_local=self.use_local,
+                    use_aws=self.use_aws,
+                    use_web=self.use_web,
+                    local_stores=selected_stores,
+                    custom_prompt=self.settings.agent.custom_prompt,
+                    obsidian_mode=self.settings.agent.obsidian_mode,
+                )
+            else:
+                self.status_label.setText("Researching (sequential)...")
+                self.worker = ResearchWorker(
+                    query=query,
+                    model_choice=model_choice,
+                    use_local=self.use_local,
+                    use_aws=self.use_aws,
+                    use_web=self.use_web,
+                    local_stores=selected_stores,
+                )
+
             self.worker.finished.connect(self._on_research_finished)
             self.worker.progress.connect(self._on_research_progress)
             self.worker.error.connect(self._on_query_error)
@@ -675,6 +792,7 @@ Index Size: {info.get("index_size_mb", 0):.2f} MB""")
         """Handle successful query result."""
         self.search_btn.setEnabled(True)
         self.search_input.setEnabled(True)
+        self.progress_bar.hide()
 
         # Render results as markdown
         if not result.results:
@@ -699,6 +817,7 @@ Index Size: {info.get("index_size_mb", 0):.2f} MB""")
         """Handle query error."""
         self.search_btn.setEnabled(True)
         self.search_input.setEnabled(True)
+        self.progress_bar.hide()
         self.status_label.setText(f"Error: {error_msg}")
         self.results_view.setHtml(self._get_error_html(error_msg))
         self.sources_text.clear()
@@ -707,6 +826,7 @@ Index Size: {info.get("index_size_mb", 0):.2f} MB""")
         """Handle successful research completion."""
         self.search_btn.setEnabled(True)
         self.search_input.setEnabled(True)
+        self.progress_bar.hide()
 
         # Store result for export
         self._last_result = result

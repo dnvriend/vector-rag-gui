@@ -18,29 +18,38 @@ class ModelChoice(str, Enum):
 
 
 class ToolChoice(str, Enum):
-    """Available tool choices for research."""
+    """Available optional tool choices for research.
 
-    LOCAL = "local"
-    AWS = "aws"
-    WEB = "web"
-    GLOB = "glob"
-    GREP = "grep"
-    READ = "read"
+    Core tools (glob, grep, read, todo_read, todo_write) are always enabled.
+    """
+
+    # Optional tools that can be enabled/disabled
+    LOCAL = "local"  # Local RAG vector stores (default: enabled)
+    AWS = "aws"  # AWS documentation (default: disabled)
+    WEB = "web"  # Web tools: web_search, web_fetch, extended web (default: disabled)
 
 
 class ResearchRequest(BaseModel):
-    """Request model for research synthesis endpoint."""
+    """Request model for research synthesis endpoint.
+
+    Core tools are always enabled:
+    - glob, grep, read (file operations)
+    - todo_read, todo_write (task tracking)
+
+    Optional tools can be toggled:
+    - local: RAG vector stores (default: enabled)
+    - aws: AWS documentation (default: disabled)
+    - web: Web tools (web_search, web_fetch, extended web) (default: disabled)
+    """
 
     question: str = Field(..., description="Research question or topic", min_length=1)
-    stores: list[str] = Field(..., description="List of local vector store names to query")
+    stores: list[str] = Field(
+        default_factory=lambda: ["obsidian-knowledge-base"],
+        description="List of local vector store names to query",
+    )
     tools: list[ToolChoice] = Field(
-        default_factory=lambda: [
-            ToolChoice.LOCAL,
-            ToolChoice.GLOB,
-            ToolChoice.GREP,
-            ToolChoice.READ,
-        ],
-        description="Tools to enable for research (default: local, glob, grep, read)",
+        default_factory=lambda: [ToolChoice.LOCAL],
+        description="Optional tools to enable (default: local). Core tools always enabled.",
     )
     model: ModelChoice = Field(
         default=ModelChoice.SONNET,

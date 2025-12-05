@@ -220,6 +220,58 @@ Guidelines:
 """
 
 
+OBSIDIAN_KNOWLEDGE_PROMPT = """
+## Obsidian Vault Knowledge
+
+You are researching an Obsidian vault. Follow these MANDATORY steps:
+
+### Step 1: Find Relevant Notes
+Use LOCAL RAG results to identify relevant files. RAG gives you file paths - use them.
+
+### Step 2: Read Full Files (REQUIRED)
+For EVERY relevant file path from RAG:
+```
+read_file(path="/path/to/note.md")
+```
+RAG only shows snippets. You MUST read the full file to get complete context.
+
+### Step 3: Follow Wiki Links (REQUIRED)
+When you see `[[Note Title]]` or `[[folder/Note Title]]` in a note:
+1. Search for the linked file:
+   ```
+   glob_files(pattern="**/Note Title.md")
+   ```
+2. Read the linked file:
+   ```
+   read_file(path="/found/path/Note Title.md")
+   ```
+3. Repeat for important links (2-3 levels deep)
+
+### Step 4: Date Questions - Check Daily Notes
+For questions about dates/events, ALWAYS glob daily notes:
+```
+glob_files(pattern="daily/2025/2025-01/*.md")  # January 2025
+```
+Then read relevant daily notes.
+
+### Step 5: Search for Keywords
+If RAG misses something, use grep:
+```
+grep_files(pattern="keyword", glob_pattern="**/*.md")
+```
+
+### Transcripts
+- Transcripts are long - summarize key points, decisions, action items
+- Look for existing `## Summary` sections first
+
+### CRITICAL RULES
+1. NEVER skip reading files - RAG snippets are NOT enough
+2. ALWAYS follow wiki links with glob_files + read_file
+3. For dates, glob the daily/ folder for that time period
+4. Read at least 3-5 connected notes for proper context
+"""
+
+
 class ResearchAgent:
     """Agent that synthesizes research from multiple knowledge sources.
 

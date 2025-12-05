@@ -13,6 +13,8 @@ dependencies = [
     "anthropic>=0.40.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "claude-agent-sdk>=0.1.12",
+    "anyio>=4.0.0",
 ]
 authors = [
     {name = "Dennis Vriend", email = "dvriend@ilionx.com"}
@@ -70,6 +72,10 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = ["vector_rag_tool.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["claude_agent_sdk.*"]
 ignore_missing_imports = true
 
 [tool.bandit]

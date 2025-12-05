@@ -15,6 +15,7 @@ from vector_rag_gui.core.settings import (
     DEFAULT_WINDOW_WIDTH,
     DEFAULT_WINDOW_X,
     DEFAULT_WINDOW_Y,
+    AgentSettings,
     ResearchSettings,
     Settings,
     WindowSettings,
@@ -43,6 +44,25 @@ class TestWindowSettings:
         assert settings.width == 1000
         assert settings.height == 800
         assert settings.splitter_sizes == [600, 200]
+
+
+class TestAgentSettings:
+    """Tests for AgentSettings dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values."""
+        settings = AgentSettings()
+        assert settings.custom_prompt == ""
+        assert settings.obsidian_mode is False
+
+    def test_custom_values(self) -> None:
+        """Test custom values."""
+        settings = AgentSettings(
+            custom_prompt="Focus on Python best practices",
+            obsidian_mode=True,
+        )
+        assert settings.custom_prompt == "Focus on Python best practices"
+        assert settings.obsidian_mode is True
 
 
 class TestResearchSettings:
@@ -85,6 +105,7 @@ class TestSettings:
         assert settings.selected_stores == []
         assert isinstance(settings.window, WindowSettings)
         assert isinstance(settings.research, ResearchSettings)
+        assert isinstance(settings.agent, AgentSettings)
 
     def test_to_dict(self) -> None:
         """Test conversion to dictionary."""
@@ -98,8 +119,11 @@ class TestSettings:
         assert data["selected_stores"] == ["store1", "store2"]
         assert "window" in data
         assert "research" in data
+        assert "agent" in data
         assert data["window"]["x"] == DEFAULT_WINDOW_X
         assert data["research"]["model"] == "sonnet"
+        assert data["agent"]["custom_prompt"] == ""
+        assert data["agent"]["obsidian_mode"] is False
 
     def test_from_dict(self) -> None:
         """Test creation from dictionary."""
@@ -122,6 +146,10 @@ class TestSettings:
                 "dark_mode": False,
                 "full_content": True,
             },
+            "agent": {
+                "custom_prompt": "Be concise",
+                "obsidian_mode": True,
+            },
         }
         settings = Settings.from_dict(data)
 
@@ -131,6 +159,8 @@ class TestSettings:
         assert settings.window.splitter_sizes == [400, 100]
         assert settings.research.research_mode is False
         assert settings.research.model == "haiku"
+        assert settings.agent.custom_prompt == "Be concise"
+        assert settings.agent.obsidian_mode is True
 
     def test_from_dict_with_defaults(self) -> None:
         """Test from_dict fills in defaults for missing keys."""
@@ -141,6 +171,8 @@ class TestSettings:
         assert settings.selected_stores == []
         assert settings.window.x == DEFAULT_WINDOW_X
         assert settings.research.model == "sonnet"
+        assert settings.agent.custom_prompt == ""
+        assert settings.agent.obsidian_mode is False
 
 
 class TestLoadSaveSettings:
@@ -173,6 +205,8 @@ class TestLoadSaveSettings:
                 )
                 original.window.x = 500
                 original.research.model = "opus"
+                original.agent.custom_prompt = "Be concise and technical"
+                original.agent.obsidian_mode = True
                 save_settings(original)
 
                 # Load them back
@@ -182,6 +216,8 @@ class TestLoadSaveSettings:
                 assert loaded.selected_stores == ["store1", "store2"]
                 assert loaded.window.x == 500
                 assert loaded.research.model == "opus"
+                assert loaded.agent.custom_prompt == "Be concise and technical"
+                assert loaded.agent.obsidian_mode is True
 
     def test_load_invalid_json_returns_defaults(self) -> None:
         """Test loading invalid JSON returns defaults."""
