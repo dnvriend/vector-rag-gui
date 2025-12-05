@@ -1,7 +1,7 @@
 """File tools for Claude Agent SDK.
 
 Provides read-only filesystem access tools: glob, grep, and read.
-All operations are restricted to the current working directory for security.
+Allows reading any file accessible to the user.
 
 Note: This code was generated with assistance from AI coding tools
 and has been reviewed and tested by a human.
@@ -14,34 +14,28 @@ from pathlib import Path
 from anthropic import beta_tool
 
 
-def _safe_path(path: str | None, base_dir: Path | None = None) -> Path:
-    """Resolve path safely within base directory.
+def _resolve_path(path: str | None, default_dir: Path | None = None) -> Path:
+    """Resolve path to absolute path.
 
     Args:
-        path: Path string to resolve
-        base_dir: Base directory to restrict to (defaults to cwd)
+        path: Path string to resolve (can be absolute or relative)
+        default_dir: Default directory if path is None (defaults to cwd)
 
     Returns:
-        Resolved Path object within base_dir
-
-    Raises:
-        ValueError: If path escapes base directory
+        Resolved absolute Path object
     """
-    if base_dir is None:
-        base_dir = Path.cwd()
+    if default_dir is None:
+        default_dir = Path.cwd()
 
     if path is None:
-        return base_dir
+        return default_dir
 
-    resolved = (base_dir / path).resolve()
+    path_obj = Path(path).expanduser()
 
-    # Security check: ensure path doesn't escape base directory
-    try:
-        resolved.relative_to(base_dir.resolve())
-    except ValueError:
-        raise ValueError(f"Path '{path}' escapes base directory")
+    if path_obj.is_absolute():
+        return path_obj.resolve()
 
-    return resolved
+    return (default_dir / path_obj).resolve()
 
 
 @beta_tool
@@ -56,8 +50,7 @@ def glob_files(pattern: str, directory: str | None = None) -> str:
         JSON string with list of matching file paths
     """
     try:
-        base_dir = Path.cwd()
-        search_dir = _safe_path(directory, base_dir)
+        search_dir = _resolve_path(directory)
 
         matches = list(search_dir.glob(pattern))
 
@@ -66,11 +59,7 @@ def glob_files(pattern: str, directory: str | None = None) -> str:
         files = []
         for match in matches[:max_results]:
             if match.is_file():
-                try:
-                    rel_path = match.relative_to(base_dir)
-                    files.append(str(rel_path))
-                except ValueError:
-                    files.append(str(match))
+                files.append(str(match))
 
         return json.dumps(
             {
@@ -80,8 +69,6 @@ def glob_files(pattern: str, directory: str | None = None) -> str:
             }
         )
 
-    except ValueError as e:
-        return json.dumps({"error": str(e), "files": []})
     except Exception as e:
         return json.dumps({"error": str(e), "error_type": type(e).__name__, "files": []})
 
@@ -107,8 +94,7 @@ def grep_files(
         JSON string with matching lines and file locations
     """
     try:
-        base_dir = Path.cwd()
-        search_dir = _safe_path(directory, base_dir)
+        search_dir = _resolve_path(directory)
 
         flags = re.IGNORECASE if case_insensitive else 0
         regex = re.compile(pattern, flags)
@@ -139,14 +125,9 @@ def grep_files(
                 content = file_path.read_text(encoding="utf-8", errors="ignore")
                 for line_num, line in enumerate(content.splitlines(), 1):
                     if regex.search(line):
-                        try:
-                            rel_path = file_path.relative_to(base_dir)
-                        except ValueError:
-                            rel_path = file_path
-
                         matches.append(
                             {
-                                "file": str(rel_path),
+                                "file": str(file_path),
                                 "line": line_num,
                                 "content": line[:200],  # Truncate long lines
                             }
@@ -175,8 +156,6 @@ def grep_files(
 
     except re.error as e:
         return json.dumps({"error": f"Invalid regex: {e}", "matches": []})
-    except ValueError as e:
-        return json.dumps({"error": str(e), "matches": []})
     except Exception as e:
         return json.dumps({"error": str(e), "error_type": type(e).__name__, "matches": []})
 
@@ -191,7 +170,7 @@ def read_file(
     """Read contents of a file.
 
     Args:
-        path: Path to the file (relative to current working directory)
+        path: Path to the file (absolute or relative to current working directory)
         start_line: Starting line number (1-indexed, default: 1)
         end_line: Ending line number (inclusive, default: start_line + max_lines)
         max_lines: Maximum lines to read if end_line not specified (default: 200)
@@ -200,8 +179,7 @@ def read_file(
         JSON string with file contents and metadata
     """
     try:
-        base_dir = Path.cwd()
-        file_path = _safe_path(path, base_dir)
+        file_path = _resolve_path(path)
 
         if not file_path.exists():
             return json.dumps({"error": f"File not found: {path}", "content": None})
