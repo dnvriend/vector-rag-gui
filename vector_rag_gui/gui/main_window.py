@@ -177,12 +177,15 @@ class MainWindow(QMainWindow):
 
         self.sources_text = QTextEdit()
         self.sources_text.setReadOnly(True)
-        self.sources_text.setMaximumHeight(120)
         self.sources_text.setPlaceholderText("Sources will appear here after a query...")
         sources_layout.addWidget(self.sources_text)
 
         splitter.addWidget(sources_widget)
-        splitter.setSizes([500, 150])
+
+        # Configure splitter behavior
+        splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing completely
+        splitter.setHandleWidth(6)  # Make handle easier to grab
+        splitter.setSizes([500, 120])  # Default: large results, compact sources
 
         layout.addWidget(splitter)
 
