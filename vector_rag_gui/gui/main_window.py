@@ -7,7 +7,17 @@ and has been reviewed and tested by a human.
 import markdown
 from pygments.formatters import HtmlFormatter
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QBrush, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut
+from PyQt6.QtGui import (
+    QAction,
+    QBrush,
+    QCloseEvent,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPen,
+    QPixmap,
+    QShortcut,
+)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -29,6 +39,7 @@ from PyQt6.QtWidgets import (
 
 from vector_rag_gui.core.agent import ResearchResult
 from vector_rag_gui.core.query import QueryResult
+from vector_rag_gui.core.settings import Settings, load_settings, save_settings
 from vector_rag_gui.gui.worker import QueryWorker, ResearchWorker
 from vector_rag_gui.logging_config import get_logger
 
@@ -41,23 +52,30 @@ DEFAULT_STORE = "obsidian-knowledge-base"
 class MainWindow(QMainWindow):
     """Main application window with search UI and markdown rendering."""
 
-    def __init__(self, default_store: str | None = None) -> None:
+    def __init__(self, default_store: str | None = None, settings: Settings | None = None) -> None:
         """Initialize main window.
 
         Args:
             default_store: Optional store name to select on startup
+            settings: Optional settings object (loads from file if not provided)
         """
         super().__init__()
+        self.settings = settings or load_settings()
         self.default_store = default_store or DEFAULT_STORE
         self.worker: QueryWorker | ResearchWorker | None = None
         self.stores: list[dict[str, str]] = []
         self.stores_menu: QMenu  # Initialized in _init_menu
-        self.dark_mode: bool = True  # Default to dark mode
-        self.full_content: bool = False  # Default to snippets
-        self.research_mode: bool = True  # Default to research mode
-        self.use_local: bool = True  # Use local knowledge
-        self.use_aws: bool = False  # Use AWS docs
-        self.use_web: bool = False  # Use web search
+        self.splitter: QSplitter  # Initialized in _init_ui
+
+        # Load settings
+        self.dark_mode: bool = self.settings.research.dark_mode
+        self.full_content: bool = self.settings.research.full_content
+        self.research_mode: bool = self.settings.research.research_mode
+        self.use_local: bool = self.settings.research.use_local
+        self.use_aws: bool = self.settings.research.use_aws
+        self.use_web: bool = self.settings.research.use_web
+        self._selected_stores: list[str] = list(self.settings.selected_stores)
+
         self._last_result: ResearchResult | None = None  # Last research result for export
         # Status message queue for minimum display time
         self._status_queue: list[str] = []
@@ -69,6 +87,7 @@ class MainWindow(QMainWindow):
         self._init_menu()
         self._init_tray()
         self._load_stores()
+        self._restore_window_geometry()
 
     def _init_ui(self) -> None:
         """Initialize the user interface."""
@@ -83,8 +102,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # Selected stores (managed via menu)
-        self._selected_stores: list[str] = []
+        # Selected stores loaded from settings in __init__
 
         # Research mode controls
         research_layout = QHBoxLayout()
@@ -126,7 +144,9 @@ class MainWindow(QMainWindow):
         self.model_combo.addItem("Haiku (Fast)", "haiku")
         self.model_combo.addItem("Sonnet (Balanced)", "sonnet")
         self.model_combo.addItem("Opus (Best)", "opus")
-        self.model_combo.setCurrentIndex(1)  # Default to Sonnet
+        # Set model from settings
+        model_index = {"haiku": 0, "sonnet": 1, "opus": 2}.get(self.settings.research.model, 1)
+        self.model_combo.setCurrentIndex(model_index)
         self.model_combo.setToolTip("Select Claude model for synthesis")
         self.model_combo.setFixedWidth(140)
         research_layout.addWidget(self.model_combo)
@@ -159,12 +179,12 @@ class MainWindow(QMainWindow):
         layout.addLayout(search_layout)
 
         # Splitter for results and sources
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter = QSplitter(Qt.Orientation.Vertical)
 
         # Results view (markdown)
         self.results_view = QWebEngineView()
         self.results_view.setHtml(self._get_welcome_html())
-        splitter.addWidget(self.results_view)
+        self.splitter.addWidget(self.results_view)
 
         # Sources panel
         sources_widget = QWidget()
@@ -180,14 +200,14 @@ class MainWindow(QMainWindow):
         self.sources_text.setPlaceholderText("Sources will appear here after a query...")
         sources_layout.addWidget(self.sources_text)
 
-        splitter.addWidget(sources_widget)
+        self.splitter.addWidget(sources_widget)
 
         # Configure splitter behavior
-        splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing completely
-        splitter.setHandleWidth(6)  # Make handle easier to grab
-        splitter.setSizes([500, 120])  # Default: large results, compact sources
+        self.splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing completely
+        self.splitter.setHandleWidth(6)  # Make handle easier to grab
+        # Splitter sizes restored in _restore_window_geometry
 
-        layout.addWidget(splitter)
+        layout.addWidget(self.splitter)
 
         # Status bar
         self.status_label = QLabel("")
@@ -334,10 +354,53 @@ class MainWindow(QMainWindow):
 
     def _quit_app(self) -> None:
         """Quit the application."""
+        self._save_settings()
         self.tray_icon.hide()
         from PyQt6.QtWidgets import QApplication
 
         QApplication.quit()
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:  # noqa: N802
+        """Handle window close event."""
+        self._save_settings()
+        super().closeEvent(event)
+
+    def _restore_window_geometry(self) -> None:
+        """Restore window position and size from settings."""
+        self.setGeometry(
+            self.settings.window.x,
+            self.settings.window.y,
+            self.settings.window.width,
+            self.settings.window.height,
+        )
+        if self.settings.window.splitter_sizes:
+            self.splitter.setSizes(self.settings.window.splitter_sizes)
+        else:
+            self.splitter.setSizes([500, 120])
+
+    def _save_settings(self) -> None:
+        """Save current settings to file."""
+        # Window geometry
+        geo = self.geometry()
+        self.settings.window.x = geo.x()
+        self.settings.window.y = geo.y()
+        self.settings.window.width = geo.width()
+        self.settings.window.height = geo.height()
+        self.settings.window.splitter_sizes = self.splitter.sizes()
+
+        # Selected stores
+        self.settings.selected_stores = self._selected_stores.copy()
+
+        # Research settings
+        self.settings.research.research_mode = self.research_mode
+        self.settings.research.use_local = self.use_local
+        self.settings.research.use_aws = self.use_aws
+        self.settings.research.use_web = self.use_web
+        self.settings.research.model = self.model_combo.currentData() or "sonnet"
+        self.settings.research.dark_mode = self.dark_mode
+        self.settings.research.full_content = self.full_content
+
+        save_settings(self.settings)
 
     def _toggle_full_content(self) -> None:
         """Toggle between full content and snippets."""

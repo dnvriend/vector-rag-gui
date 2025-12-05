@@ -18,6 +18,8 @@ A Qt6 GUI for searching local FAISS vector stores with AI-powered research synth
 - Real-time progress with token usage and cost tracking
 - Dark/Light mode toggle
 - System tray integration
+- Built-in REST API server (starts automatically with GUI)
+- Persistent settings (window position, selected stores, tools, model)
 
 ## Installation
 
@@ -46,8 +48,11 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="arn:aws:bedrock:..."
 ## Usage
 
 ```bash
-# Launch GUI
+# Launch GUI (REST API starts automatically)
 vector-rag-gui
+
+# Launch with custom API port
+vector-rag-gui --port 9000
 
 # Launch with specific store pre-selected
 vector-rag-gui start --store my-knowledge-base
@@ -65,10 +70,22 @@ vector-rag-gui -vv   # DEBUG
 vector-rag-gui -vvv  # TRACE
 ```
 
+On startup, a banner displays the API endpoints:
+
+```
+╭─────────────────────────────────────────╮
+│         Vector RAG GUI v0.1.0           │
+├─────────────────────────────────────────┤
+│  REST API: http://127.0.0.1:8000        │
+│  Swagger:  http://127.0.0.1:8000/docs   │
+╰─────────────────────────────────────────╯
+```
+
 ## Options
 
 | Option | Description |
 |--------|-------------|
+| `-p, --port` | REST API port (default: from settings or 8000) |
 | `-v, --verbose` | Increase verbosity (repeatable) |
 | `-h, --help` | Show help message |
 | `--version` | Show version |
@@ -78,9 +95,81 @@ vector-rag-gui -vvv  # TRACE
 | Command | Description |
 |---------|-------------|
 | `start` | Launch GUI (default) |
+| `serve` | Start REST API server |
 | `stores` | List available vector stores |
 | `config` | Show current configuration |
 | `completion` | Generate shell completion script |
+
+## REST API
+
+Start the API server for programmatic access:
+
+```bash
+vector-rag-gui serve                        # Default: localhost:8000
+vector-rag-gui serve --host 0.0.0.0 --port 8080
+vector-rag-gui serve --reload               # Development mode
+```
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/models` | List available Claude models |
+| GET | `/api/v1/tools` | List available research tools |
+| GET | `/api/v1/stores` | List available vector stores |
+| POST | `/api/v1/research` | Execute research synthesis |
+
+### Research Request
+
+Minimal request (question and stores required):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/research \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How does X work?", "stores": ["obsidian-knowledge-base"]}'
+```
+
+Full request with all options:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/research \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "How does X work?",
+    "stores": ["obsidian-knowledge-base", "code-docs"],
+    "model": "opus",
+    "tools": ["local", "aws", "web", "glob", "grep", "read"],
+    "top_k": 10
+  }'
+```
+
+### Request Parameters
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `question` | Yes | - | Research question |
+| `stores` | Yes | - | Vector store names to query |
+| `model` | No | `sonnet` | Model: `haiku`, `sonnet`, `opus` |
+| `tools` | No | `["local", "glob", "grep", "read"]` | Tools to enable |
+| `top_k` | No | `5` | Results per source (1-20) |
+
+### Available Tools
+
+| Tool | Category | Description |
+|------|----------|-------------|
+| `local` | search | Search local FAISS vector stores |
+| `aws` | search | Search AWS documentation |
+| `web` | search | Search the web |
+| `glob` | file | Find files by pattern |
+| `grep` | file | Search file contents |
+| `read` | file | Read file contents |
+
+### API Documentation
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- OpenAPI: http://localhost:8000/openapi.json
 
 ## Keyboard Shortcuts
 
@@ -92,6 +181,42 @@ vector-rag-gui -vvv  # TRACE
 | `Ctrl+I` | Show store info |
 | `Ctrl+M` | Minimize to tray |
 | `Ctrl+Q` | Quit |
+
+## Settings
+
+Settings are persisted to `~/.config/vector-rag-gui/settings.json` and restored on startup.
+
+Saved settings include:
+- Window position and size
+- Splitter panel sizes
+- Selected stores
+- Research mode options (tools, model, dark mode)
+- REST API port
+
+Example settings file:
+
+```json
+{
+  "port": 8000,
+  "selected_stores": ["obsidian-knowledge-base"],
+  "window": {
+    "x": 100,
+    "y": 100,
+    "width": 900,
+    "height": 700,
+    "splitter_sizes": [500, 120]
+  },
+  "research": {
+    "research_mode": true,
+    "use_local": true,
+    "use_aws": false,
+    "use_web": false,
+    "model": "sonnet",
+    "dark_mode": true,
+    "full_content": false
+  }
+}
+```
 
 ## Development
 
