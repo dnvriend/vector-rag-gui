@@ -21,6 +21,8 @@ A Qt6 GUI for searching local FAISS vector stores with AI-powered research synth
 - Built-in REST API server (starts automatically with GUI)
 - Persistent settings (window position, selected stores, tools, model)
 
+![Screenshot](screenshots/screenshot1.png)
+
 ## Installation
 
 Requires Python 3.14+, [uv](https://github.com/astral-sh/uv), and [vector-rag-tool](https://github.com/dnvriend/vector-rag-tool).
