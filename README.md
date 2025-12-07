@@ -7,7 +7,19 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A Qt6 GUI for searching local FAISS vector stores with AI-powered research synthesis.
+A Qt6 GUI for searching local FAISS vector stores with AI-powered research synthesis. Built as a custom agent using the [Claude Code Agent SDK](https://github.com/anthropics/claude-code-sdk-python).
+
+## Architecture
+
+This application is built on the Claude Code Agent SDK framework, providing an agentic research assistant with access to multiple tools:
+
+| Dependency | Usage |
+|------------|-------|
+| [vector-rag-tool](https://github.com/dnvriend/vector-rag-tool) | Library for local FAISS vector store search |
+| [gemini-google-search-tool](https://github.com/dnvriend/gemini-google-search-tool) | Library for web search via Gemini with Google Search grounding |
+| [claude-code-sdk-python](https://github.com/anthropics/claude-code-sdk-python) | Agent framework for tool orchestration |
+
+The agent orchestrates these tools to synthesize research from multiple sources (local knowledge bases, AWS documentation, web search, and file system exploration).
 
 ## Features
 
