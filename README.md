@@ -11,15 +11,42 @@ A Qt6 GUI for searching local FAISS vector stores with AI-powered research synth
 
 ## Architecture
 
-This application is built on the Claude Code Agent SDK framework, providing an agentic research assistant with access to multiple tools:
+This application is built on the [Claude Code Agent SDK](https://github.com/anthropics/claude-code-sdk-python) framework, providing an agentic research assistant with access to multiple tools.
 
-| Dependency | Usage |
-|------------|-------|
-| [vector-rag-tool](https://github.com/dnvriend/vector-rag-tool) | Library for local FAISS vector store search |
-| [gemini-google-search-tool](https://github.com/dnvriend/gemini-google-search-tool) | Library for web search via Gemini with Google Search grounding |
-| [claude-code-sdk-python](https://github.com/anthropics/claude-code-sdk-python) | Agent framework for tool orchestration |
+### Dependencies
 
-The agent orchestrates these tools to synthesize research from multiple sources (local knowledge bases, AWS documentation, web search, and file system exploration).
+| Library | Usage |
+|---------|-------|
+| [vector-rag-tool](https://github.com/dnvriend/vector-rag-tool) | Local FAISS vector store search |
+| [aws-knowledge-tool](https://github.com/dnvriend/aws-knowledge-tool) | AWS documentation search |
+| [gemini-google-search-tool](https://github.com/dnvriend/gemini-google-search-tool) | Web search via Gemini with Google Search grounding |
+| [claude-code-sdk-python](https://github.com/anthropics/claude-code-sdk-python) | Agent framework with `@tool` decorator and MCP server |
+
+### Agent Tools
+
+The agent has access to 6 tools using the Claude Agent SDK `@tool` decorator:
+
+| Tool | Description |
+|------|-------------|
+| `search_local_knowledge` | Search local FAISS vector stores |
+| `search_aws_docs` | Search AWS documentation |
+| `search_web` | Search the web with Google Search grounding |
+| `glob_files` | Find files matching glob patterns |
+| `grep_files` | Search for regex patterns in files |
+| `read_file` | Read contents of a specific file |
+
+### Custom Prompts
+
+The agent supports custom system prompts for specialized use cases:
+
+- **Research Prompt**: Default prompt for multi-source research synthesis
+- **Obsidian Knowledge Prompt**: Template for querying Obsidian vaults with wiki-link following and daily notes support
+
+The Obsidian prompt instructs the agent to:
+1. Use RAG to find relevant notes
+2. Read full files (not just snippets)
+3. Follow `[[wiki links]]` using glob + read
+4. Search daily notes for date-related queries
 
 ## Features
 
